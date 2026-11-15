@@ -1,17 +1,21 @@
 """A pipeline stage that must write exactly one terminal receipt."""
 
+import threading
+
 
 class Stage:
     def __init__(self, store, before_write=None):
         self.store = store                      # where receipts are written
         self._finished = False
+        self._lock = threading.Lock()
         self._before_write = before_write or (lambda kind: None)  # test seam
 
     def _write(self, kind):
-        if self._finished:                      # check...
-            return False
-        self._before_write(kind)                # (window: another thread can pass the check here)
-        self._finished = True                   # ...then act
+        with self._lock:                        # claim atomically: check-and-set
+            if self._finished:
+                return False
+            self._finished = True
+        self._before_write(kind)
         self.store.append(kind)
         return True
 
